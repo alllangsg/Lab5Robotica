@@ -1,0 +1,1 @@
+/home/allan/Robotica/catkin1_ws/devel/.private/catkin_tools_prebuild/_setup_util.py

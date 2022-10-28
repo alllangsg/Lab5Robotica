@@ -1,0 +1,1 @@
+/home/allan/Robotica/catkin1_ws/devel/.private/dynamixel_one_motor/share/dynamixel_one_motor/cmake/dynamixel_one_motorConfig.cmake

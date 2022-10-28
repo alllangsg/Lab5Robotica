@@ -1,0 +1,2 @@
+- setup-file:
+    local-name: /home/allan/Robotica/catkin1_ws/devel/.private/dynamixel_one_motor/setup.sh

@@ -1,0 +1,1 @@
+/home/allan/Robotica/catkin1_ws/devel/.private/dynamixel_one_motor/lib/pkgconfig/dynamixel_one_motor.pc

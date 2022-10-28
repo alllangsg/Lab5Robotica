@@ -1,0 +1,1 @@
+/home/allan/Robotica/catkin1_ws/devel/./cmake.lock 10

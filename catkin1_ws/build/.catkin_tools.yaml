@@ -1,0 +1,6 @@
+devel_space: /home/allan/Robotica/catkin1_ws/devel
+install: false
+install_space: /home/allan/Robotica/catkin1_ws/install
+profile: default
+source_space: /home/allan/Robotica/catkin1_ws/src
+workspace: /home/allan/Robotica/catkin1_ws

@@ -1,0 +1,2 @@
+- setup-file:
+    local-name: /home/allan/Robotica/catkin1_ws/devel/.private/catkin_tools_prebuild/setup.sh
