@@ -1,0 +1,28 @@
+#Codigo ROS for Pincher
+
+cd Robotica/catkin1_ws
+catkin build dynamixel_one_motor
+source devel/setup.bash
+
+#Checar la conexión USB del pincher y darle permisos de root.
+lsusb
+ls /dev/tty*
+sudo chmod 777 /dev/ttyUSB0
+
+
+#En otra consola.
+#Correr el roscore siempre (despues del launch).
+roscore
+
+#lanzar el modulo motor one controller. (consola antes del roscore)
+roslaunch dynamixel_one_motor one_controller.launch
+
+
+#Para correr los scripts python: 
+#en otra consola
+cd Robotica/catkin1_ws/src
+python3 dynamixel_one_motor/scripts/jointPub.py #alfinal el nombre del script.
+
+#Checar los nodos y los topicos en otra consola.
+rostopic list
+rosservice list
