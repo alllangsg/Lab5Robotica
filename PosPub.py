@@ -8,11 +8,16 @@ from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
 
 #constantes de interes.
 pi=np.pi
+open=0
 closed=45 #angulo para gripper cerrado. °
 phig=0 #orientación de la muñeca.
 zoff=11 #altura marcador en cm.
-dt=0.1 #1mm entre puntos.
+dt=0.5 #5mm entre puntos.
 radcir= 4 #radio circulo en cm.
+lonlin= 3 #longitud lineas en cm.
+alturaF= 4 #Altura de la F en cm. q
+anchoF = 4 #ancho F en cm
+ladotrian= 4 #lados del triangulo.
 
 # pasar a radianes.
 def rad(degrees):
@@ -20,15 +25,16 @@ def rad(degrees):
     return angle
 
 #posiciones cartesianas de interes:
-homex=[20,0,20,phig,0]
+homex=[20,0,20,phig,open]
 limiteinf=[0,-20,zoff,phig,closed]
 limitesup=[0,-30,zoff,phig,closed]
-posmarcador=[20,20,zoff+5,phig,0]
+posmarcador=[20,20,zoff+5,phig,open]
 tomarmarcador=[20,20,zoff,phig,closed]
 triangorg=[10,10,zoff,phig,closed]
 centroCir=[-5,20]
 paralelasorg=[-10,20,zoff,phig,closed]
 puntoespera=[-10,10,zoff+10,phig,closed]
+posiniciales=[10,15,zoff,phig,closed]
 
 # posturas de interes:
 home=[0,0,0,0,0]
@@ -95,11 +101,48 @@ def Pos(x,y,z,phid,q5d): #(x,y,z) en cm, (phid,q5d) en grados.
     Solgof= [q1,q2+alpha2,q3-alpha2,q4,q5] #rad
     return Solgof
 
+#MTH para DH desde el marco i-1 al marco i.#rad
+def MTHDH(ai,alphai,di,thetai):
+    H = [[np.cos(thetai),-np.sin(thetai)*np.cos(alphai), np.sin(thetai)*np.sin(alphai), ai*np.cos(thetai)],[np.sin(thetai),np.cos(thetai)*np.cos(alphai),-np.cos(thetai)*np.sin(alphai),ai*np.sin(thetai)],[0, np.sin(alphai), np.cos(alphai), di],[0, 0, 0, 1]]
+    return H
+
+#función cinemática directa: 
+def Direct(input):
+  q1=input[0]
+  q2=input[1]
+  q3=input[2]
+  q4=input[3]
+  q5=input[4]
+  
+  phid=q2+q3+q4
+  alpha2=np.arccos(3.39/10.63) #radians
+  MTH01 = np.array(MTHDH(0,np.pi/2,4.44,q1)) #rad 
+  #MTH de O2 respecto a O1
+  MTH12 = np.array(MTHDH(10.63,0,0,q2+alpha2))  #rad 
+  #MTH de O3 respecto a O2
+  MTH23 = np.array(MTHDH(10.5,0,0,q3-alpha2))  #rad
+  #MTH de O4 respecto a O3
+  MTH34 = np.array(MTHDH(12.8,0,0,q4))#rad
+  #MTH de O5 respecto a O0.
+  #MTH04=MTH01*MTH12*MTH23*MTH34
+  aux=mul_matrix(MTH01,MTH12)
+  aux=mul_matrix(aux,MTH23)
+  aux=mul_matrix(aux,MTH34)
+  result=[]
+  result.append(aux[0][3])#x
+  result.append(aux[1][3])#y
+  result.append(aux[2][3])#z
+  result.append(phid)#phid
+  q5d=q5*180/np.pi #degrees
+  result.append(q5d) #q5d
+  return result #x,y,z,phid,q5
+
+
 # función para generar una linea recta (loop de Pos())
 def linea(ini,fin): #en cm y grados.
     #ini=[x,y,z,phid,q5d]
     #fin=[x,y,z,phid,q5d]
-    # Se asume que ini[3]=fin[3]
+    # Se asume que ini[3]=fin[3], pero no es necesario.
     #número de puntos.
     long=np.sqrt((fin[0]-ini[0])**2 + (fin[1]-ini[1])**2 + (fin[2]-ini[2])**2)/dt
     long=int(long)
@@ -116,7 +159,10 @@ def linea(ini,fin): #en cm y grados.
             Result[x,4]=fin[4]
         joint_publisher(Result[x]) #cada fila de Result son los qs para un punto de la trayectoria.
 
-    return Result[long-1] # La ultima pose.
+    last=Result[long-1]
+    last=Direct(last)
+    delayros()
+    return last # ultimo punto.
 
 #trayectoria curva
 def curva(a,b,r,z,phid,q5d,thetamaxd):
@@ -148,36 +194,36 @@ def curva(a,b,r,z,phid,q5d,thetamaxd):
         joint_publisher(Result[x])
     
     delayros()
-    return Result[n-1] #La ultima pose
-
+    last=Result[n-1]
+    last=Direct(last)
+    return last #ultimo punto.
 
 "Rutinas a dibujar"
 
-#ir a posición de espera.
-def espera_tray():
-    joint_publisher(espera)
-    #si algo editar para que reciba la ultima pose
-    #hacer funcion que pasa de q->x,y,z para calcular el ultimo punto.
-    #pasar de ultimo punto->punto espera.
+#ir a posicion de espera.
+def espera_tray(last):
+    Result=linea(last,puntoespera)
+    return Result
 
 # Cargar Marcador.
 def marcador():
     #ir encima del marcador.
-    de=homex
-    a=posmarcador
-    Result=linea(de,a)
+    last=linea(homex,posmarcador)
 
     #bajar hacia el marcador y cerrar griper.
-    aux=Result[len(Result)-1]
-    linea(aux,tomarmarcador)
+    last=linea(last,tomarmarcador)
+
+    #subir marcador
+    last=linea(last,tomarmarcador)
 
     #ir a posicion de espera.
-    espera_tray()
+    last=espera_tray(last)
+    return last
     
 # Arco Inferior y Arco Superior.
 def arcos(lim):
     #Acercarse a punta izq.
-    de=espera
+    de=puntoespera
     
     if lim==0: #arco inferior
         a=limiteinf
@@ -187,13 +233,14 @@ def arcos(lim):
         r=20 #curvatura estimada en cm.
 
     Approach=linea(de,a)
+    Approach=Pos(Approach) #pose.
 
     #Dibujar Arco.
     n=int((pi*r)/dt) #No. de puntos.
     q10=rad(-90) #q1 inicial.
     dth=(pi)/n #paso de angulo.
-    aux=Approach #ultima pose dada.
-    Result=[aux] 
+    aux=Approach 
+    Result=[Approach] #ultima pose dada.
     #cambiar q1 para cada punto.
     for i in range(1,n):
         q10=q10+dth
@@ -201,9 +248,82 @@ def arcos(lim):
         Result.append(aux)
         joint_publisher(Result[i])
 
+    last=Result[n-1]
+    last=Direct(last)
+
+    #ir a punto de espera:
+    last=espera_tray(last)
+
+    return last #ultimo punto.
 
 
 # Iniciales JA.
+def iniciales(centro):
+    #centro es un punto
+    #Acercarse a punto.
+    last=linea(puntoespera,centro)
+
+    #Dibujar F
+    #Dibujar Vertical
+    objetivo=last
+    objetivo[1]=alturaF
+    last=linea(last,objetivo)
+    #Dibujar Horizontal
+    objetivo=last
+    objetivo[0]=anchoF
+    last=linea(last,objetivo)
+    #Dibujar Mitad
+    #acercarse a mitad.
+    objetivo=last
+    objetivo[0]-=anchoF
+    objetivo[1]-=alturaF/2
+    objetivo[2]=zoff+3
+    last=linea(last,objetivo)
+    #bajar lapiz
+    objetivo[2]=zoff
+    last=linea(last,objetivo)
+    #dibujar linea.
+    objetivo=last
+    objetivo[0]+=anchoF
+    last=linea(last,objetivo)
+
+    #Dibujar A
+    #ir a punto A.
+    objetivo=last
+    objetivo[0]+=anchoF+1
+    objetivo[1]-=alturaF/2
+    objetivo[2]=zoff+3# subir marcador
+    last=linea(last,objetivo) 
+    #bajar marcador
+    objetivo[2]=zoff
+    last=linea(last,objetivo)
+    #dibujar triangulo.
+    objetivo=last
+    objetivo[0]+=anchoF/2
+    objetivo[1]+=alturaF
+    last=linea(last,objetivo)
+    objetivo=last
+    objetivo[0]+=anchoF/2
+    objetivo[1]-=alturaF
+    last=linea(last,objetivo)
+    #dibujar mitad.
+    #ir a mitad
+    objetivo=last
+    objetivo[0]=anchoF/4
+    objetivo[1]=alturaF/2
+    objetivo[2]=zoff+3
+    last=linea(last,objetivo)
+    #bajar marcador
+    objetivo[3]=zoff
+    last=linea(last,objetivo)
+    #dibujar
+    objetivo=last
+    objetivo[0]=3*anchoF/4
+    last=linea(last,objetivo)
+
+    #ir a punto de espera 
+    last=espera_tray(last)
+    return last  
 
 
 # Triangulo Equilatero.
@@ -217,16 +337,21 @@ def triang(origin,a):
     #Primer vector 0->2
     last=linea(origin,punto2)
     #Segundo vector 2->3
-    last=linea(punto2,punto3)
+    last=linea(last,punto3)
     #Tercer Vector 3->0
-    last=linea(punto3,origin)
+    last=linea(last,origin)
+
+    #ir a punto de espera
+    last=espera_tray(last)
     return last
 
 # Circunferencia.
 def circulo(a,b,r):
+    #dubujar circulo
     last=curva(a,b,r,zoff,phig,closed,360)
     #ir a punto de espera.
-    espera_tray()
+    last=espera_tray(last)
+    return last
 
 # 3 Lineas Paralelas.
 def paralelas(n,sepy,m,origin):
@@ -234,7 +359,7 @@ def paralelas(n,sepy,m,origin):
     #n= numero de lineas.
     #sep = separacion entre lineas.
     # m= slope
-    l=3 #cm largo de las lineas.
+    l=lonlin #cm largo de las lineas.
     dx=np.sqrt(l**2/(m**2+1))
     dy=m*dx
     #ir al origen de las lineas.
@@ -257,13 +382,28 @@ def paralelas(n,sepy,m,origin):
         next[1]=origin[1]+sepy*(i+1) #desplaza sepy cm y
         next[2]=zoff+5 #alzar marcador.
         last=linea(current,next)
-        
-
     #ir a punto de espera.
-    espera_tray()
+    last=espera_tray(last)
+    return last
 
 # Descargar marcador.
+def descargue():
+    #ir a pos marcador.
+    objetivo=posmarcador
+    objetivo[4]=closed
+    last=linea(puntoespera,objetivo)
+    #bajar marcador y soltar
+    objetivo=tomarmarcador
+    objetivo[4]=open
+    last=linea(last,objetivo)
+    #subir 3cm.
+    objetivo=last
+    objetivo[2]+=3
+    last=linea(last,objetivo)
 
+    #ir a home. 
+    last=linea(last,homex)
+    return last
 
 #array de rutinas.
 #postura=[home,pos1,pos2,pos3,pos4,rest]
@@ -272,7 +412,6 @@ def paralelas(n,sepy,m,origin):
 
 # Función de publicación: (itera sobre la lista de posicipones)
 def joint_publisher(postura):
-    publicado=postura[i]
     pub = rospy.Publisher('/joint_trajectory', JointTrajectory, queue_size=0)
     rospy.init_node('joint_publisher', anonymous=False)
               
@@ -280,7 +419,7 @@ def joint_publisher(postura):
     state.header.stamp = rospy.Time.now()
     state.joint_names = ["joint_1","joint_2","joint_3","joint_4","joint_5"]
     point = JointTrajectoryPoint()
-    point.positions = publicado  
+    point.positions = postura
     point.time_from_start = rospy.Duration(0.5)
     state.points.append(point)
     pub.publish(state)
@@ -294,31 +433,38 @@ def interfaz():
     while not rospy.is_shutdown():
         #control de mov. con teclas.
         key=input()
-        if key == 'a':
+        if key == 'q':
             #marcador
             marcador()
             key = ' '
         elif key == 'w':
             #arco inf
+            arcos(0)
             key = ' '
         elif key == 's':
             #arco sup.
-            key = ' '
-        elif key == 'd':
-            #inicial J
-            #inicial A
-            key = ' '
-        elif key == 'q':
-            #Trianglulo equilatero.
+            arcos(1)
             key = ' '
         elif key == 'e':
-            #Circunferencia.
+            #iniciales FA
+            iniciales(posiniciales)
             key = ' '
-        elif key =='r':
+        elif key == 'a':
+            #Trianglulo equilatero.
+            triang(triangorg,ladotrian)
+            key = ' '
+        elif key == 'd':
+            #Circunferencia.
+            circulo(8,8,radcir)
+            key = ' '
+        elif key =='x':
             #3 lineas paralelas
+            #paralelas(n,sepy,m,origin):
+            paralelas(3,0,2,paralelasorg)
             key== ' '
-        elif key =='f':
+        elif key =='z':
             #descargar marcador
+            descargue()
             key== ' '
 
 
