@@ -10,9 +10,6 @@ ls /dev/tty*
 sudo chmod 777 /dev/ttyUSB0
 
 
-#En otra consola.
-#Correr el roscore siempre (despues del launch).
-roscore
 
 #lanzar el modulo motor one controller. (consola antes del roscore)
 roslaunch dynamixel_one_motor one_controller.launch
@@ -21,7 +18,7 @@ roslaunch dynamixel_one_motor one_controller.launch
 #Para correr los scripts python: 
 #en otra consola
 cd Robotica/catkin1_ws/src
-python3 dynamixel_one_motor/scripts/jointPub.py #alfinal el nombre del script.
+python3 dynamixel_one_motor/scripts/PosPub.py #alfinal el nombre del script.
 
 #Checar los nodos y los topicos en otra consola.
 rostopic list

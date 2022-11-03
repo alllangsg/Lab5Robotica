@@ -1,40 +1,75 @@
 'Cinematica Inversa PhantomX'
 
+from fileinput import close
 import rospy
 import numpy as np
+import matplotlib.pyplot as plt
 from std_msgs.msg import String
 from sensor_msgs.msg import JointState
 from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
 
 #constantes de interes.
 pi=np.pi
-open=0
-closed=45 #angulo para gripper cerrado. °
-phig=0 #orientación de la muñeca.
-zoff=11 #altura marcador en cm.
-dt=0.5 #5mm entre puntos.
-radcir= 4 #radio circulo en cm.
-lonlin= 3 #longitud lineas en cm.
+open=15
+closed=-8.6 #angulo para gripper cerrado. °
+zoff=9 #altura marcador en cm.
+ng=7 #numero puntos por trayectoria.
+ncurv=15 #numero de puntos para curva 180°
+radcir= 2 #radio circulo en cm.
+lonlin= 5 #longitud lineas en cm.
 alturaF= 4 #Altura de la F en cm. q
 anchoF = 4 #ancho F en cm
-ladotrian= 4 #lados del triangulo.
+ladotrian= 5 #lados del triangulo.
+short=6 #distancia para bajar/ #puntos tray corta.
+shorter=3
 
 # pasar a radianes.
 def rad(degrees):
     angle=degrees*np.pi/180
     return angle
 
+#asignar un array a uno
+def asignar(current):
+  new=[]
+  for i in range(len(current)):
+    new.append(current[i])
+  return new
+
+#graficar.
+def graficar(puntos):
+    x=[]
+    y=[]
+    for i in range(len(puntos)):
+        x.append(puntos[i][0])
+        y.append(puntos[i][1])
+
+    plt.figure(1)
+    plt.plot(x, y)
+    plt.show()
+
+#unir dos arrays
+def unir(target,arr2):
+    aux=asignar(target)
+    for i in range(len(arr2)):
+        aux.append(arr2[i])
+    return aux
+
 #posiciones cartesianas de interes:
-homex=[20,0,20,phig,open]
-limiteinf=[0,-20,zoff,phig,closed]
-limitesup=[0,-30,zoff,phig,closed]
-posmarcador=[20,20,zoff+5,phig,open]
-tomarmarcador=[20,20,zoff,phig,closed]
-triangorg=[10,10,zoff,phig,closed]
-centroCir=[-5,20]
-paralelasorg=[-10,20,zoff,phig,closed]
-puntoespera=[-10,10,zoff+10,phig,closed]
-posiniciales=[10,15,zoff,phig,closed]
+limiteinf=[10,-9,zoff+3.4,closed]
+limitesup=[21,-20,zoff+5,closed]
+homex=[25,0,20,open]
+puntoespera=[20,5,zoff+short,closed]
+
+posmarcador=[14.4,-23.5,zoff+7.5,open]
+tomarmarcador=[14.5,-23.5,zoff+1.4,open]
+
+triangorg=[20,0,zoff,closed]
+centroCir=[20,6]
+paralelasorg=[18.3,-8,zoff-1,closed]
+posiniciales=[10,15,zoff,closed]
+test=[25,5,zoff+3,closed]
+libreorg=[10,10,zoff,closed]
+puntosorg=[12,-10,zoff+0.7,closed]
 
 # posturas de interes:
 home=[0,0,0,0,0]
@@ -42,379 +77,423 @@ homec=[0,0,0,0,rad(closed)]
 espera=[10,-10,10,0,rad(closed)]
 
 
-
-# multiplicar matrices:
-def mul_matrix(A,B):
-  global C
-  if  A.shape[1] == B.shape[0]:
-    C = np.zeros((A.shape[0],B.shape[1]),dtype = float)
-    for row in range(A.shape[0]): 
-        for col in range(B.shape[1]):
-            for elt in range(len(B)):
-              C[row, col] += A[row, elt] * B[elt, col]
-    return C
-  else:
-    return "Sorry, cannot multiply A and B."
-
-#delay entre trayectorias.
-def delayros():
-    rospy.sleep(10)
-
-# función de cinemática inversa.
-def Pos(x,y,z,phid,q5d): #(x,y,z) en cm, (phid,q5d) en grados.
-    phi=rad(phid)
-    q5=rad(q5d)
-
-    #primer servo (q1):
-    q1=np.arctan2(y,x) #rad
+def Pos(array):
+    #pasar a mm.
+    x=array[0]*10
+    y=array[1]*10
+    z=array[2]*10
+    q5=rad(array[3])
+    #Triangulo constante
+    hipo=106.5; #distancia diagonal entre q2 y q3
+    cate=np.sqrt(hipo**2-100**2) #cateto de la diagonal
+    angle = np.arctan2(cate,100)
     
-    #posición muñeca:
-    a4=12.8
-    PTCP4= np.array([[-a4], [0], [0],[1] ])
-    #Matriz de transferencia de TCP respecto a 0:
-    Rx90=np.array([[1,0,0], [0,np.cos(pi/2),-np.sin(pi/2)], [0,np.sin(pi/2),np.cos(pi/2)]])
-    Rzphi=np.array([[np.cos(phi), -np.sin(phi), 0], [np.sin(phi), np.cos(phi), 0],[0, 0, 1]])
-    R=mul_matrix(Rx90,Rzphi)
-    H0TCP=np.array([[R[0,0],R[0,1],R[0,2],x], [R[1,0],R[1,1],R[1,2],y], [R[2,0],R[2,1],R[2,2],z], [0, 0, 0,1]])
-    #pos muñeca respecto a base
-    P04=mul_matrix(H0TCP,PTCP4)
-
-    #Tercer servo (q3):
-    a2=10.63 #cm
-    a3=10.5 #cm
-    cosq3=-(P04[0]**2+P04[2]**2-a2**2-a3**2)/(2*a2*a3)
-    sinq3=-np.sqrt(1-cosq3**2)
-    q3=np.arctan2(sinq3,cosq3) #rad
-
-    #Segundo servo (q2):
-    k1=a2+a3*cosq3
-    k2=a3*sinq3
-    q2=np.arctan2(P04[2],P04[0])+np.arctan2(k2,k1) #rad
-
-    #Cuarto Servo (q4): 
-    q4=phi-q2-q3 #rad.
-
-    #Solución sin offsets.
-    Solg=[q1,q2,q3,q4] #rad
-    #Solución con los offsets.
-    alpha2=np.arccos(3.39/10.63) #radians
-    Solgof= [q1,q2+alpha2,q3-alpha2,q4,q5] #rad
-    return Solgof
-
-#MTH para DH desde el marco i-1 al marco i.#rad
-def MTHDH(ai,alphai,di,thetai):
-    H = [[np.cos(thetai),-np.sin(thetai)*np.cos(alphai), np.sin(thetai)*np.sin(alphai), ai*np.cos(thetai)],[np.sin(thetai),np.cos(thetai)*np.cos(alphai),-np.cos(thetai)*np.sin(alphai),ai*np.sin(thetai)],[0, np.sin(alphai), np.cos(alphai), di],[0, 0, 0, 1]]
-    return H
-
-#función cinemática directa: 
-def Direct(input):
-  q1=input[0]
-  q2=input[1]
-  q3=input[2]
-  q4=input[3]
-  q5=input[4]
-  
-  phid=q2+q3+q4
-  alpha2=np.arccos(3.39/10.63) #radians
-  MTH01 = np.array(MTHDH(0,np.pi/2,4.44,q1)) #rad 
-  #MTH de O2 respecto a O1
-  MTH12 = np.array(MTHDH(10.63,0,0,q2+alpha2))  #rad 
-  #MTH de O3 respecto a O2
-  MTH23 = np.array(MTHDH(10.5,0,0,q3-alpha2))  #rad
-  #MTH de O4 respecto a O3
-  MTH34 = np.array(MTHDH(12.8,0,0,q4))#rad
-  #MTH de O5 respecto a O0.
-  #MTH04=MTH01*MTH12*MTH23*MTH34
-  aux=mul_matrix(MTH01,MTH12)
-  aux=mul_matrix(aux,MTH23)
-  aux=mul_matrix(aux,MTH34)
-  result=[]
-  result.append(aux[0][3])#x
-  result.append(aux[1][3])#y
-  result.append(aux[2][3])#z
-  result.append(phid)#phid
-  q5d=q5*180/np.pi #degrees
-  result.append(q5d) #q5d
-  return result #x,y,z,phid,q5
-
-
-# función para generar una linea recta (loop de Pos())
-def linea(ini,fin): #en cm y grados.
-    #ini=[x,y,z,phid,q5d]
-    #fin=[x,y,z,phid,q5d]
-    # Se asume que ini[3]=fin[3], pero no es necesario.
-    #número de puntos.
-    long=np.sqrt((fin[0]-ini[0])**2 + (fin[1]-ini[1])**2 + (fin[2]-ini[2])**2)/dt
-    long=int(long)
-    #paso para cada dirección.
-    pasox=(fin[0]-ini[0])/long
-    pasoy=(fin[1]-ini[1])/long
-    pasoz=(fin[2]-ini[2])/long
-
-    #Matriz de puntos
-    Result=[]
-    for x in range(0,long):
-        Result.append(Pos(ini[0]+pasox,ini[1]+pasoy,ini[2]+pasoz,ini[3],ini[4]))
-        if x==long-1 and ini[4]!=fin[4]: #abrir o cerrar gripper al final
-            Result[x,4]=fin[4]
-        joint_publisher(Result[x]) #cada fila de Result son los qs para un punto de la trayectoria.
-
-    last=Result[long-1]
-    last=Direct(last)
-    delayros()
-    return last # ultimo punto.
-
-#trayectoria curva
-def curva(a,b,r,z,phid,q5d,thetamaxd):
-    #centro (a,b) en #cm
-    # Phi no cambia.
-    # r en cm.
-    phi=rad(phid) #orientacion de la muñeca.
-    q5=rad(q5d) #apertura del gripper
-    thetamax=rad(thetamaxd)
+    q1=np.arctan2(y,x)
     
-    n=int((thetamax*r)/dt) #No. de puntos.
-    dth=(thetamax)/n #paso de angulo.
-    #lista de angulos.
-    theta=[0]
-    for i in range(1,n):
-        theta.append(theta[i-1]+(dth))
+    dmar0 = np.array([[x], [y], [z]])
+    d3 = np.multiply(np.array([[np.cos(q1)], [np.sin(q1)], [0]]),100)
+    dw0 = dmar0-d3
     
-    #calculo de x y y.
-    x=[]
-    y=[]
-    for i in range(0,n):
-        x.append(r*(np.cos(theta[i]))+a)
-        y.append(r*(np.sin(theta[i]))+b)
+    dz = dw0[2]-94
+    r2 = (dw0[0])**2+(dw0[1])**2+(dz)**2
+    r = np.sqrt(r2)
+    
+    #Teorema del coseno
+    alpha = np.arccos((100**2+r2-hipo**2)/(2*r*100))
+    beta = np.arccos((r2+hipo**2-100**2)/(2*r*hipo))
+    gamma = np.arccos((hipo**2+100**2-r2)/(2*hipo*100))
 
-    #Matriz de puntos
-    Result=[]
-    for i in range(0,n):
-        Result.append(Pos(x[i],y[i],z,phi,q5))
-        joint_publisher(Result[x])
+    theta = np.arctan2(dz,np.sqrt((dw0[0])**2+(dw0[1])**2))
+    psi = np.pi-alpha
+    phi = np.pi-psi-theta
+    omega = np.pi-phi
+    kappa = omega-np.pi/2
     
-    delayros()
-    last=Result[n-1]
-    last=Direct(last)
-    return last #ultimo punto.
+    q2= np.round(np.pi/2-theta-beta-angle-np.pi/18,3)
+    q3= np.round(np.pi-gamma-(np.pi/2-angle),3)
+    q4 =np.round(-(np.pi/2-kappa),3)
+    Result=[float(np.round(q1,3)),float(-q2),float(-q3),float(-q4),float(q5)]
+
+    return Result
+    
+#mover al punto determinado.
+def Mover(pos):
+    now=asignar(Pos(pos))
+    joint_publisher(now)
+    return now
+
+def bajar(pos,ban,input):
+    if input==0:#inversa
+        now=asignar(Pos(pos))
+    elif input==1:#directa
+        now=asignar(pos)
+
+    if ban==0:#subir
+        now[1]+=rad(30)
+        now[2]+=rad(10)
+    elif ban==1:#bajar
+        now[1]-=rad(12)
+        now[2]-=rad(-10)
+
+    joint_publisher(now)
+
+#nueva función linea recta.
+def linea(ini,fin,n):
+  pasox = (fin[0]-ini[0])/n
+  #print("El paso en X es", pasox)
+  pasoy = (fin[1]-ini[1])/n
+  #print("El paso en Y es", pasoy)
+  pasoz = (fin[2]-ini[2])/n
+  #print("El paso en Z es", pasoz)
+  #print("Ahora vamos a enviar cada punto de la línea")
+  #print("Puntos originales:",ini[0]," ",ini[1]," ",ini[2]," ")
+  #print("Puntos objetivo:",fin[0]," ",fin[1]," ",fin[2]," ")
+  #primer punto
+  for i in range(n):
+    #print("Punto: ", i)
+    ini[0] = ini[0]+pasox
+    ini[1] = ini[1]+pasoy
+    ini[2] = ini[2]+pasoz
+    Result=Pos(ini)
+    joint_publisher(Result)
+    #print("Nuevos puntos en trayectoria",ini[0]," ",ini[1]," ",ini[2]," ")
+    #print("Repite ciclo")
+  print("Los puntos finales son: x ",ini[0],"y ",ini[1],"z ",ini[2]," ")
+  print("Fin de la rutina")
+
 
 "Rutinas a dibujar"
-
-#ir a posicion de espera.
-def espera_tray(last):
-    Result=linea(last,puntoespera)
-    return Result
 
 # Cargar Marcador.
 def marcador():
     #ir encima del marcador.
-    last=linea(homex,posmarcador)
-
+    Mover(posmarcador)
     #bajar hacia el marcador y cerrar griper.
-    last=linea(last,tomarmarcador)
-
+    aux1=Mover(tomarmarcador)
+    aux1[4]=closed
+    joint_publisher(aux1) #cerrar gripper
     #subir marcador
-    last=linea(last,tomarmarcador)
-
+    aux=asignar(tomarmarcador)
+    aux[3]=closed
+    bajar(aux,0,0)
     #ir a posicion de espera.
-    last=espera_tray(last)
-    return last
+    Mover(puntoespera)
+
     
 # Arco Inferior y Arco Superior.
 def arcos(lim):
-    #Acercarse a punta izq.
-    de=puntoespera
-    
     if lim==0: #arco inferior
-        a=limiteinf
-        r=4 #curvatura estimada en cm.
+        a=asignar(limiteinf)
     elif lim==1: #arco superior.
-        a=limitesup
-        r=20 #curvatura estimada en cm.
+        a=asignar(limitesup)
+    #Acercarse a punta izq.
+    Mover(a)
+    #bajar marcador.
+    aux=asignar(a)
+    aux[2]-=5
+    linea(a,aux,1)
+    #bajar(a,1)
 
-    Approach=linea(de,a)
-    Approach=Pos(Approach) #pose.
+    Approach=Pos(a) #pose.
 
     #Dibujar Arco.
-    n=int((pi*r)/dt) #No. de puntos.
-    q10=rad(-90) #q1 inicial.
-    dth=(pi)/n #paso de angulo.
-    aux=Approach 
-    Result=[Approach] #ultima pose dada.
-    #cambiar q1 para cada punto.
-    for i in range(1,n):
-        q10=q10+dth
-        aux[0]=q10
-        Result.append(aux)
-        joint_publisher(Result[i])
+    q10=rad(-45) #q1 inicial.
+    aux1=asignar(Approach) 
+    aux1[0]=q10+rad(90)
+    joint_publisher(aux1)
 
-    last=Result[n-1]
-    last=Direct(last)
+    #subir marcador
+    aux2=asignar(aux1)
+    aux2[0]=q10+rad(90)
+    bajar(aux2,0,1)
 
     #ir a punto de espera:
-    last=espera_tray(last)
-
-    return last #ultimo punto.
+    Mover(puntoespera)
 
 
 # Iniciales JA.
-def iniciales(centro):
-    #centro es un punto
-    #Acercarse a punto.
-    last=linea(puntoespera,centro)
 
-    #Dibujar F
-    #Dibujar Vertical
-    objetivo=last
-    objetivo[1]=alturaF
-    last=linea(last,objetivo)
-    #Dibujar Horizontal
-    objetivo=last
-    objetivo[0]=anchoF
-    last=linea(last,objetivo)
-    #Dibujar Mitad
-    #acercarse a mitad.
-    objetivo=last
-    objetivo[0]-=anchoF
-    objetivo[1]-=alturaF/2
-    objetivo[2]=zoff+3
-    last=linea(last,objetivo)
-    #bajar lapiz
-    objetivo[2]=zoff
-    last=linea(last,objetivo)
-    #dibujar linea.
-    objetivo=last
-    objetivo[0]+=anchoF
-    last=linea(last,objetivo)
+#Triangulo Equilatero.   
+def Newtriangulo():
+    #xt=20
+    #yt=-1
+    punto1 = [20,-1,zoff-0.5,closed]
+    Mover(punto1)
+    punto2 = [20,3,zoff-0.5,closed]
+    punto3 = [23.46,1,zoff,closed]
+    punto4 = [20,-1,zoff,closed]
+    linea(punto1,punto2,8)
+    linea(punto2,punto3,8)
+    linea(punto3,punto4,8)
+    
+    #levantar marcador:
+    bajar(punto4,0,0)
 
-    #Dibujar A
-    #ir a punto A.
-    objetivo=last
-    objetivo[0]+=anchoF+1
-    objetivo[1]-=alturaF/2
-    objetivo[2]=zoff+3# subir marcador
-    last=linea(last,objetivo) 
-    #bajar marcador
-    objetivo[2]=zoff
-    last=linea(last,objetivo)
-    #dibujar triangulo.
-    objetivo=last
-    objetivo[0]+=anchoF/2
-    objetivo[1]+=alturaF
-    last=linea(last,objetivo)
-    objetivo=last
-    objetivo[0]+=anchoF/2
-    objetivo[1]-=alturaF
-    last=linea(last,objetivo)
-    #dibujar mitad.
-    #ir a mitad
-    objetivo=last
-    objetivo[0]=anchoF/4
-    objetivo[1]=alturaF/2
-    objetivo[2]=zoff+3
-    last=linea(last,objetivo)
-    #bajar marcador
-    objetivo[3]=zoff
-    last=linea(last,objetivo)
-    #dibujar
-    objetivo=last
-    objetivo[0]=3*anchoF/4
-    last=linea(last,objetivo)
+    #ir punto de espera:
+    Mover(puntoespera)
 
-    #ir a punto de espera 
-    last=espera_tray(last)
-    return last  
+#punto equidistantes.
+def puntos():
+    #moverse al origen
+    ini=asignar(puntosorg)
+    ini[2]+=2
+    Mover(ini)
 
+    aux=asignar(puntosorg)
+    #hacer puntos
+    for i in range(5):
+        bajar(aux,1,0)
+        bajar(aux,0,0)
+        aux[0]+=2
+        aux[2]+=0.22
+        if i==4:
+            aux[2]+=1
+        Mover(aux)
 
-# Triangulo Equilatero.
-def triang(origin,a):
-    #origin=[x,y,z,phid,q5d] punto inf izq.
-    punto2=origin
-    punto2[0]=origin[0]+a #inf. der.
-    punto3=origin
-    punto3[0]=origin[0]+a/2
-    punto3[1]=origin[1]+(np.sqrt(3)*a/2) #punta sup.
-    #Primer vector 0->2
-    last=linea(origin,punto2)
-    #Segundo vector 2->3
-    last=linea(last,punto3)
-    #Tercer Vector 3->0
-    last=linea(last,origin)
+    #a punto de espera.
+    Mover(puntoespera)
+    
+def lineas(n):#subirlo en z.
+    #paralelasorg=[18.3,-8,zoff-1,closed]
+    #mover a punto y bajarmarcador
+    auxl=asignar(paralelasorg)
+    auxl[0]-=0.5
+    auxl[1]+=0.5
+    auxl[2]+=2.6
+    Mover(auxl) #15,-5
+    bajar(auxl,1,0)
 
-    #ir a punto de espera
-    last=espera_tray(last)
-    return last
+    #linea1
+    punto1=[18.3,-4,zoff-1,closed]
+    linea(paralelasorg,punto1,n)
+    bajar(punto1,0,0)#subir marcador.
 
-# Circunferencia.
-def circulo(a,b,r):
-    #dubujar circulo
-    last=curva(a,b,r,zoff,phig,closed,360)
+    #linea 2
+    punto2=[20,-8,zoff-1,closed]
+    punto3=[20,-4,zoff-1,closed]
+    #acercarse a punto 2 y bajar
+    auxl=asignar(punto2)
+    auxl[0]-=1
+    auxl[2]+=4
+    Mover(auxl)
+    bajar(auxl,1,0)
+    #hacer linea
+    linea(punto2,punto3,n)
+    bajar(punto3,0,0)#subir
+
+    #linea 3
+    punto4=[21.7,-8,zoff-0.5,closed]
+    punto5=[21.7,-4,zoff-0.5,closed]
+    #acercarse y bajar marcador
+    auxl=asignar(punto4)
+    auxl[0]-=1
+    auxl[2]+=4.2
+    Mover(auxl)
+    bajar(auxl,1,0)
+    #dibujar linea
+    linea(punto4,punto5,n)
+    #alzar marcador
+    bajar(punto5,0,0)#subir
+
     #ir a punto de espera.
-    last=espera_tray(last)
-    return last
+    Mover(puntoespera)
 
-# 3 Lineas Paralelas.
-def paralelas(n,sepy,m,origin):
-    #origin=[x,y,z,phid,q5d] punto inf izq.
-    #n= numero de lineas.
-    #sep = separacion entre lineas.
-    # m= slope
-    l=lonlin #cm largo de las lineas.
-    dx=np.sqrt(l**2/(m**2+1))
-    dy=m*dx
-    #ir al origen de las lineas.
-    last=linea(puntoespera,origin)
-    #dibujar n lineas:
-    for i in range(n):
-        #calcular puntos.
-        origin[0]=origin[0]+1*i #desplaza 1cm x
-        origin[1]=origin[1]+sepy*i #desplaza sepy cm y
-        punto2=origin
-        punto2[0]=origin[0]+dx #x2
-        punto2[1]=origin[1]+dy #y2
-        #Dibujar linea
-        last=linea(next,origin) #bajar marcador
-        last=linea(origin,punto2) #dibujar linea.
-        #ir al siguiente origen
-        current=punto2 #actualizar punto actual.
-        next=origin #calcular siguien origen
-        next[0]=origin[0]+1*(i+1) #desplaza 1cm x
-        next[1]=origin[1]+sepy*(i+1) #desplaza sepy cm y
-        next[2]=zoff+5 #alzar marcador.
-        last=linea(current,next)
-    #ir a punto de espera.
-    last=espera_tray(last)
-    return last
 
 # Descargar marcador.
 def descargue():
-    #ir a pos marcador.
-    objetivo=posmarcador
-    objetivo[4]=closed
-    last=linea(puntoespera,objetivo)
-    #bajar marcador y soltar
-    objetivo=tomarmarcador
-    objetivo[4]=open
-    last=linea(last,objetivo)
-    #subir 3cm.
-    objetivo=last
-    objetivo[2]+=3
-    last=linea(last,objetivo)
+    #ir encima del marcador.
+    aux1=asignar(posmarcador)
+    aux1[3]=closed
+    Mover(aux1)
+    #bajar hacia el marcador y abrir griper.
+    aux2=Mover(tomarmarcador)
+    aux2[4]=open
+    joint_publisher(aux2) #abrir gripper
+    #subir marcador
+    aux=asignar(tomarmarcador)
+    aux[3]=open
+    bajar(aux,0,0)
+    #ir a home.
+    Mover(homex)
 
-    #ir a home. 
-    last=linea(last,homex)
-    return last
 
-#array de rutinas.
-#postura=[home,pos1,pos2,pos3,pos4,rest]
+#trayectoria curva
+def curva(a,b,r,z,q5d,thetamaxd,sup):
+    #centro (a,b) en #cm
+    # r en cm.
+    off=0
+    centro=[a,b,z-0.5,q5d]
+    #ir al centro
+    cir=[centro]
 
-#posturas de prueba:
+    thetamax=thetamaxd
+    
+    q5=rad(q5d) #apertura del gripper
+    if thetamax > 200:
+        thetamax%=200
+    thetamax=rad(thetamaxd)
+    
+    n=int(ncurv*thetamaxd/180) #No. de puntos.
+    print(n)
+    dth=(thetamax)/n #paso de angulo.
+    #lista de angulos.
+    if sup==0:#inf
+        theta=[pi/2]
+    if sup==1:#sup
+        theta=[-pi/2]
+    
+    for i in range(1,n):
+        theta.append(theta[i-1]+(dth))
+    #print(theta)
+    #calculo de x y y.
+    x=[]
+    y=[]
+    zq=[]
+    k=0.2
+    pasoi=[0,1,2,3,4,5]
+    #dz para cada pi/4
+    for i in range(n):
+        if sup==1: #arco sup
+            paso=pasoi[i%4]*5/4
+            if theta[i]< (thetamax+pi/2): #n/2
+                zq.append(z+0.6+paso*k)
+            elif theta[i] < (thetamax+rad(220)): #n
+                zq.append(z+0.6-paso*k)
+        elif sup==0: #arco inf.
+            zq.append(z+0.3)
+
+    print(zq)
+
+    for i in range(0,n):
+        x.append(r*(np.cos(theta[i]))+a)
+        y.append(r*(np.sin(theta[i]))+b)
+    
+    #print(x)
+    #print(y)
+    #ir a pto inicio circulo (mitad izq)
+    #Mover(centro) #movel al centro.
+    #bajar(centro,0,0) #subir marcador.
+    inicio=asignar(centro) #punto inicial.
+    inicio[0]=x[0]
+    inicio[1]=y[0]
+    inicio[2]+=0 #dz entre circulo y centro.
+    #cir.append(aux1)
+    #Mover(inicio)#mover a inicio 
+    #bajar(inicio,0,0)#subir marcador
+
+    #Crear array con puntos de circulo
+    for i in range(0,n):
+        result2=[x[i], y[i], zq[i], q5]
+        cir.append(result2)
+
+    #Dibujar circulo.
+    for i in range(len(cir)-1):
+        linea(cir[i],cir[i+1],1)
+        #Mover(cir[i+1])
+    
+    #subir marcador:
+    #bajar(cir[-1],0,0)
+    #ir a punto final: 
+    final=asignar(centro)
+    final[0]=x[n-1]
+    final[1]=y[n-1]
+    final[2]=z
+    #print(final)
+    #Mover(final)
+    bajar(final,0,0)#subir marcador
+
+    
+
+#Circunferencia
+def circulo(a,b,r):
+    #dibujar circulo
+    curva(a,b,r,zoff,closed,200,1)#superior.
+    curva(a,b,r,zoff,closed,200,0)#inferior
+    #ir a punto de espera.
+    Mover(puntoespera)
+    
+#iniciales
+def iniciales():
+    posA=[10,15,zoff-0.2,closed]
+    #la A:
+    #aproximacion
+    #Mover(posiniciales)
+    auxi=asignar(posA)
+    auxi[2]-=0.7
+    Mover(auxi)
+    #bajar(posA,1,0)
+    #linea 1
+    punto1=[15,13,zoff,closed]
+    #Mover(punto1)
+    linea(posA,punto1,4)
+    #linea 2
+    punto2=[10,11,zoff-0.3,closed]
+    linea(punto1,punto2,4)
+    bajar(punto2,0,0)
+    #linea 3
+    punto3=[12,14.5,zoff-0.2,closed]
+    Mover(punto3)
+    punto4=[12,11.3,zoff-0.2,closed]
+    linea(punto3,punto4,3)
+    bajar(punto4,0,0)#subir"""
+
+    #la F:
+    #aproximacion
+    xf=18
+    yf=13
+    posF=[xf,yf,zoff-0.2,closed]
+    auxi=asignar(posF)
+    auxi[2]-=0.5
+    Mover(auxi)
+    #linea 1:
+    punto1=[xf+5,yf,zoff,closed]
+    linea(posF,punto1,7)
+    #linea 2:
+    punto2=[xf+5,yf-3,zoff,closed]
+    linea(punto1,punto2,4)
+    bajar(punto2,0,0)#subir
+    #linea 3:
+    punto3=[xf+2.5,yf,zoff,closed]
+    Mover(punto3)
+    punto4=[xf+2.5,yf-3,zoff,closed]
+    linea(punto3,punto4,4)
+    bajar(punto4,0,0) #subir
+
+    #ir a espera
+    Mover(puntoespera)
+
+#figura libre
+def libre():
+    #xl=22
+    #yl=-2
+    posLibre=[22-0.6,-2,zoff-0.5,closed]
+    Mover(posLibre)
+    #cruz
+    #linea1:
+    pos1=[22+4,-2,zoff-0.5,closed]
+    linea(posLibre,pos1,6)
+    bajar(pos1,0,0) #subir
+    #linea2:
+    pos2=[22+2,-2-2,zoff,closed]
+    pos3=[22+2,-2+2,zoff,closed]
+    Mover(pos2)
+    linea(pos2,pos3,6)
+    bajar(pos3,0,0)#subir
+
+    #curva superior
+    poscurva=[22+2,-2-2,zoff,closed]
+    Mover(poscurva)
+    #dibujar semicirculo
+    curva(24,-2,2,zoff,closed,190,1)
+
+    #posicion de espera:
+    Mover(puntoespera)
+
 
 # Función de publicación: (itera sobre la lista de posicipones)
 def joint_publisher(postura):
     pub = rospy.Publisher('/joint_trajectory', JointTrajectory, queue_size=0)
-    rospy.init_node('joint_publisher', anonymous=False)
-              
+    rospy.init_node('joint_publisher', anonymous=False) 
     state = JointTrajectory()
     state.header.stamp = rospy.Time.now()
     state.joint_names = ["joint_1","joint_2","joint_3","joint_4","joint_5"]
@@ -424,7 +503,7 @@ def joint_publisher(postura):
     state.points.append(point)
     pub.publish(state)
     print('published command')
-    rospy.sleep(1)
+    rospy.sleep(3)
     
 
 # FUNCIÓN DE ACCESO:
@@ -447,25 +526,39 @@ def interfaz():
             key = ' '
         elif key == 'e':
             #iniciales FA
-            iniciales(posiniciales)
+            iniciales()
             key = ' '
         elif key == 'a':
             #Trianglulo equilatero.
-            triang(triangorg,ladotrian)
+            Newtriangulo()
             key = ' '
         elif key == 'd':
             #Circunferencia.
-            circulo(8,8,radcir)
+            circulo(centroCir[0],centroCir[1],radcir)
             key = ' '
         elif key =='x':
             #3 lineas paralelas
-            #paralelas(n,sepy,m,origin):
-            paralelas(3,0,2,paralelasorg)
+            lineas(5)
             key== ' '
         elif key =='z':
             #descargar marcador
             descargue()
             key== ' '
+        elif key=='m':
+            Mover(puntoespera)
+            key= ' '
+        elif key=='t':
+            Mover(test)
+            key=' '
+        elif key=='h':
+            Mover(homex)
+            key=' '
+        elif key=='p':
+            #puntos equidistantes
+            puntos()
+        elif key=='f':
+            key=' '
+            libre()
 
 
 if __name__ == '__main__':
