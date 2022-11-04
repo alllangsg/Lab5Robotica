@@ -102,10 +102,54 @@ Una vez se tiene esta base, se creó una función cuyo objetivo es trazar línea
 
 Una vez se tienen estos bloques base, fué posible iniciar con la definición del espacio de trabajo del robot, así como empezar con la organización del entorno disponible para poder realizar el trazado de todos los elementos solicitados en el laboratorio. A continuación se mostrará el análisis geométrico asociado a cada rutina, así como su implementación en el código con el fin de que el robot pudiese completar el trazado esperado.
 
-## Código: 
+## Código
 
-### cinemática inversa:
+### cinemática inversa
 
+La función de cinemática inversa recibe entonces, las coordenadas (x,y,z) que se quieren alcanzar, la orientación phi de la muñeca en grados, y el ángulo en grados de la apertura del gripper (q5) que será de 0° para abierto y -8.6° para agarrar el marcador.
+
+```console
+# función de cinemática inversa
+def Pos(x,y,z,phid,q5d): #(x,y,z) en cm, (phid,q5d) en grados.
+    phi=rad(phid)
+    q5=rad(q5d)
+
+    #primer servo (q1):
+    q1=np.arctan2(y,x) #rad
+    
+    #posición muñeca:
+    a4=12.8
+    PTCP4= np.array([[-a4], [0], [0],[1] ])
+    #Matriz de transferencia de TCP respecto a 0:
+    Rx90=np.array([[1,0,0], [0,np.cos(pi/2),-np.sin(pi/2)], [0,np.sin(pi/2),np.cos(pi/2)]])
+    Rzphi=np.array([[np.cos(phi), -np.sin(phi), 0], [np.sin(phi), np.cos(phi), 0],[0, 0, 1]])
+    R=mul_matrix(Rx90,Rzphi)
+    H0TCP=np.array([[R[0,0],R[0,1],R[0,2],x], [R[1,0],R[1,1],R[1,2],y], [R[2,0],R[2,1],R[2,2],z], [0, 0, 0,1]])
+    #pos muñeca respecto a base
+    P04=mul_matrix(H0TCP,PTCP4)
+
+    #Tercer servo (q3):
+    a2=10.63 #cm
+    a3=10.5 #cm
+    cosq3=-(P04[0]**2+P04[2]**2-a2**2-a3**2)/(2*a2*a3)
+    sinq3=-np.sqrt(1-cosq3**2)
+    q3=np.arctan2(sinq3,cosq3) #rad
+
+    #Segundo servo (q2):
+    k1=a2+a3*cosq3
+    k2=a3*sinq3
+    q2=np.arctan2(P04[2],P04[0])+np.arctan2(k2,k1) #rad
+
+    #Cuarto Servo (q4): 
+    q4=phi-q2-q3 #rad.
+
+    #Solución sin offsets.
+    Solg=[q1,q2,q3,q4] #rad
+    #Solución con los offsets.
+    alpha2=np.arccos(3.39/10.63) #radians
+    Solgof= [q1,-(q2+alpha2),-(q3-alpha2),-q4,q5] #rad
+    return Solgof
+```
 ### moverse a un punto:
 ```console
 #mover al punto determinado.
@@ -225,9 +269,9 @@ def arcos(lim):
     Mover(puntoespera)
 ```
 
-#### Triangulo equilatero:
+#### Triangulo equilatero
 ```console
-#Triangulo Equilatero.   
+#Triangulo Equilatero.  
 def Newtriangulo():
     #xt=20
     #yt=-1
@@ -247,7 +291,7 @@ def Newtriangulo():
     Mover(puntoespera)
  ```
  
- #### Puntos equidistantes:
+ #### Puntos equidistantes
  ```console
  #punto equidistantes.
 def puntos():
@@ -318,8 +362,10 @@ def lineas(n):#subirlo en z.
     Mover(puntoespera)
 ```
 
-#### trayectoria curva
+#### Trayectoria curva
+
 Debido a los problemas por el desplazamiento en z del phantom al subir por el eje x, se determino hacer un medio circulo de 0° a 180° con una función que suma z constantemente, y que hace otro medio circulo de 180° a 360° con una z constante.
+
 ```console
 #trayectoria curva
 def curva(a,b,r,z,q5d,thetamaxd,sup):
