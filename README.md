@@ -79,3 +79,7 @@ Analizar la repitibilidad de los trazos haciendo multiples rutinas desde el carg
 - Modelos, fotografias y descripción de la base portaherramienta y el marcador.
 - Video de la práctica. (mostrando los scripts en vivo)
 - Descripción de la solución planteada (teoría).
+
+
+#Video completo laboratorio
+
