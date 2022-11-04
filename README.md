@@ -83,3 +83,4 @@ Analizar la repitibilidad de los trazos haciendo multiples rutinas desde el carg
 
 #Video completo laboratorio
 
+https://youtu.be/AmfOuBePqY0
