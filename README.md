@@ -14,6 +14,12 @@ En primer lugar se tomaron las medidas de los eslabones con el fin de hallar los
 
 ## Video Práctica:
 
+
+[![Video Practica 5](https://img.youtube.com/vi/AmfOuBePqY0/0.jpg)](https://www.youtube.com/watch?v=AmfOuBePqY0)
+
+Video: https://www.youtube.com/watch?v=AmfOuBePqY0
+
+
 ### Resultados práctica: 
 
 A continuación se muestra una foto del resultado final de todas las figuras dibujadas por el ppincher PhanthomX. 
