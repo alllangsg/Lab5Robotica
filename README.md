@@ -648,6 +648,10 @@ if __name__ == '__main__':
 
 ## Comparación práctica y modelado: 
 
+A continución se muestra una foto con la comparación gráfica de los modelos teóricos ylos obteidos por el robot. 
+
+![ComparacionError](https://user-images.githubusercontent.com/62154397/200100419-1c68bedd-c710-446f-89da-b1ba816805b2.jpg)
+
 
 ## Entregables: 
 
