@@ -1,20 +1,20 @@
 #%%
 from fileinput import close
-import rospy
+#import rospy
 import numpy as np
 import matplotlib.pyplot as plt
-from std_msgs.msg import String
-from sensor_msgs.msg import JointState
-from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
+#from std_msgs.msg import String
+#from sensor_msgs.msg import JointState
+#from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
 
 #constantes de interes.
 pi=np.pi
 open=15
 closed=-8.6 #angulo para gripper cerrado. °
-zoff=10 #altura marcador en cm.
+zoff=9 #altura marcador en cm.
 ng=7 #numero puntos por trayectoria.
-ncurv=10 #numero de puntos para curva 180°
-radcir= 3 #radio circulo en cm.
+ncurv=15 #numero de puntos para curva 180°
+radcir= 2 #radio circulo en cm.
 lonlin= 5 #longitud lineas en cm.
 alturaF= 4 #Altura de la F en cm. q
 anchoF = 4 #ancho F en cm
@@ -22,28 +22,36 @@ ladotrian= 5 #lados del triangulo.
 short=6 #distancia para bajar/ #puntos tray corta.
 shorter=3
 
-#posiciones cartesianas de interes:
-limiteinf=[9,-9,zoff+3,closed]
-limitesup=[21,-20,zoff+5,closed]
-homex=[25,0,20,open]
-puntoespera=[20,5,zoff+short,closed]
-
-posmarcador=[14.4,-23.5,zoff+6,open]
-tomarmarcador=[14.5,-23.5,zoff-3,closed]
-
-triangorg=[20,0,zoff,closed]
-centroCir=[20,5]
-paralelasorg=[15,-5,zoff,closed]
-posiniciales=[15,-15,zoff,closed]
-test=[25,5,zoff,open]
-libreorg=[10,10,zoff,closed]
-puntosorg=[10,-10,zoff+short,closed]
-
 
 # pasar a radianes.
 def rad(degrees):
     angle=degrees*np.pi/180
     return angle
+
+
+#posiciones cartesianas de interes:
+limiteinf=[10,-9,zoff+3.4,closed]
+limitesup=[21,-20,zoff+5,closed]
+homex=[25,0,20,open]
+puntoespera=[20,5,zoff+short,closed]
+
+posmarcador=[14.4,-23.5,zoff+7.5,open]
+tomarmarcador=[14.5,-23.5,zoff+1.4,open]
+
+triangorg=[20,0,zoff,closed]
+centroCir=[20,6]
+paralelasorg=[18.3,-8,zoff-1,closed]
+posiniciales=[10,15,zoff,closed]
+test=[25,5,zoff+3,closed]
+libreorg=[10,10,zoff,closed]
+puntosorg=[12,-10,zoff+0.7,closed]
+
+# posturas de interes:
+home=[0,0,0,0,0]
+homec=[0,0,0,0,rad(closed)]
+espera=[10,-10,10,0,rad(closed)]
+
+
 
 #asignar un array a uno
 def asignar(current):
@@ -72,10 +80,21 @@ def graficar(puntos):
     for i in range(len(puntos)):
         x.append(puntos[i][0])
         y.append(puntos[i][1])
-        
+    
     plt.figure(1)
-    plt.plot(x,y)
+    #plt.xlim(-25,25)    
+    #plt.ylim(-30,0)
+    plt.plot(x,y,linewidth=10)
     plt.show()
+
+def extraer(puntos):
+    x=[]
+    y=[]
+    for i in range(len(puntos)):
+        x.append(puntos[i][0])
+        y.append(puntos[i][1])
+        
+    return x,y
     
 #nueva función linea recta.
 def linea(ini,fin,n):
@@ -119,25 +138,9 @@ def Newtriangulo():
     aux=unir(aux,lin3)
     graficar(aux)
     print(aux[0])
+    return aux
 
 Newtriangulo()
-#%%
-#punto equidistantes.
-def puntos():
-    #moverse al origen
-    graf=[puntosorg]
-    aux=asignar(puntosorg)
-    #hacer puntos
-    for i in range(5):
-        #bajar(aux,1)
-        #bajar(aux,0)
-        aux[0]+=2
-        graf.append(aux)
-
-    graficar(graf)
-    #a punto de espera.
-    #Mover(puntoespera)
-puntos()
 # %%
 #trayectoria curva
 def curva(a,b,r,z,q5d,thetamaxd,graf):
@@ -198,32 +201,55 @@ def curva(a,b,r,z,q5d,thetamaxd,graf):
 
 def circulo(a,b,r):
     #dibujar circulo
-    curva(a,b,r,zoff,closed,380,0)
+    auxc=curva(a,b,r,zoff,closed,380,1)
     #ir a punto de espera.
     #Mover(puntoespera)
-    return
+    graficar(auxc)
+    return auxc
 
 #Circunferencia.
 circulo(centroCir[0],centroCir[1],radcir) 
+
+#%%
+#punto equidistantes.
+def puntos():
+    #moverse al origen
+    graf=[]
+    aux1=[]
+    aux=asignar(puntosorg)
+    #hacer puntos
+    for i in range(5):
+        #bajar(aux,1)
+        #bajar(aux,0)
+        aux1=circulo(aux[0],aux[1],0.5)
+        graf.append(aux1)
+        aux[0]+=2
+
+    graficar(graf)
+    #a punto de espera.
+    #Mover(puntoespera)
+puntos()
+
 # %%
     
 def lineas(n):
     #Mover(paralelasorg) #15,-5
+    paralelasorg=[15,-5,zoff-1,closed]
     punto1=[15,0,zoff,closed]
     gf=[paralelasorg]
     lin1=linea(paralelasorg,punto1,n)
     gf=unir(gf,lin1)
-    #bajar(punto1,0)
+    
     #linea 2
     punto2=[17,-5,zoff,closed]
     punto3=[17,0,zoff,closed]
     #acercarse a punto 2 y bajar
     aux=asignar(punto2)
     aux[2]+=2
-    #Mover(punto2)
-    #bajar(punto2,1)
+
     #hacer linea
     lin2=linea(punto2,punto3,n)
+    x2,y2, w2, z2 =list(zip(*lin1))
     gf=unir(gf,lin2)
     #bajar(punto3,0)
     #linea 3
@@ -237,44 +263,68 @@ def lineas(n):
     #dibujar linea
     lin3=linea(punto4,punto5,n)
     gf=unir(gf,lin3)
+
     #ir a punto de espera.
     #Mover(puntoespera)
     graficar(gf)
+    
+    return gf
 
 lineas(3)
 
 # %%
 #iniciales
 def iniciales():
-    posiniciales=[20,20,zoff,closed]
-    gf=[posiniciales]
+    posA=[10,15,zoff-0.2,closed]
+    gf=[posA]
     #la A:
-    #aproximacion
-    #Mover(posiniciales)
-    #auxi=asignar(posiniciales)
-    #auxi[2]+=zoff
-    #Mover(auxi)
-    #bajar(posiniciales,1,0)
     #linea 1
-    punto1=[16,13,zoff,closed]
+    punto1=[15,13,zoff,closed]
     #Mover(punto1)
     aux=linea(posiniciales,punto1,4)
     gf=unir(gf,aux)
     #linea 2
-    punto2=[10,11,zoff,closed]
+    punto2=[10,11,zoff-0.3,closed]
     aus2=linea(punto1,punto2,4)
     gf=unir(gf,aus2)
     #Mover(punto2)
     #linea 3
 
     #la F:
-    #ir a espera
-    #bajar(punto2,0,0)
-    #Mover(puntoespera)
+    #aproximacion
+    xf=18
+    yf=13
+    posF=[xf,yf,zoff-0.2,closed]
+    #linea 1:
+    punto1=[xf+5,yf,zoff,closed]
+    aux=linea(posF,punto1,7)
+    gf=unir(gf,aux)
+    #linea 2:
+    punto2=[xf+5,yf-3,zoff,closed]
+    aux=linea(punto1,punto2,4)
+    gf=unir(gf,aux)
+    #linea 3:
+    punto3=[xf+2.5,yf,zoff,closed]
+    punto4=[xf+2.5,yf-3,zoff,closed]
+    aux=linea(punto3,punto4,4)
+    gf=unir(gf,aux)
+     
     graficar(gf)
 
 iniciales()
 
+#%%
+def arcos():
+    gf=[]
+    aux1=circulo(0,0,12.72792)#inf
+    gf=unir(gf,aux1)
+    aux2=circulo(0,0,28.28427)#sup
+    gf=unir(gf,aux2)
+    graficar(gf)
+    return gf
+
+arcos()
+    
 # %%
 #figura libre
 def libre():
@@ -307,6 +357,7 @@ def libre():
     #posicion de espera:
     #Mover(puntoespera)
     graficar(gf)
+    return gf
 
 libre()
 # %%

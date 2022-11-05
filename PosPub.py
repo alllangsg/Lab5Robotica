@@ -321,7 +321,6 @@ def descargue():
 def curva(a,b,r,z,q5d,thetamaxd,sup):
     #centro (a,b) en #cm
     # r en cm.
-    off=0
     centro=[a,b,z-0.5,q5d]
     #ir al centro
     cir=[centro]
