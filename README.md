@@ -652,12 +652,9 @@ A continución se muestra una foto con la comparación gráfica de los modelos t
 
 ![ComparacionError](https://user-images.githubusercontent.com/62154397/200100419-1c68bedd-c710-446f-89da-b1ba816805b2.jpg)
 
-
-## Entregables: 
-
-- Codigo. (.py, ROS y .yaml)
-- Modelos, fotografias y descripción de la base portaherramienta y el marcador.
-- Video de la práctica. (mostrando los scripts en vivo)
-- Descripción de la solución planteada (teoría).
+Basados en la libreria  que mide la cantidad de color en una imagen, se comparo la cantidad de naranja y azul en cada un a de las imagenes de ls figuras por separado, y se obtuvieron las diferencias entre estas proporciones. Dich diferencia se considero como el error porcentual de cada figura, las cuales se encuentran condensadas en la siguiente tabla: 
 
 
+![Error](https://user-images.githubusercontent.com/62154397/200101141-7bf96c8b-0f03-419c-9f42-cc649f40a852.jpg)
+
+Como se puede apreciar en la tabla, el robot tuvo un error promedio del 31.2% en esta practica.
